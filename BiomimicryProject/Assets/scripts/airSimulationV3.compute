@@ -1,0 +1,979 @@
+#pragma kernel FunctionKernel
+
+
+RWTexture2D<float4> computeResult;
+RWTexture2D<float4> directionResult1;
+RWTexture2D<float4> directionResult2;
+RWTexture2D<float4> directionResult3;
+RWTexture2D<float4> directionResult4;
+uint resolution;
+
+uint mouseInputX;
+uint mouseInputY;
+
+float strengthFactor;
+float strengthPower;
+
+float elasicity;
+
+float frequency;
+float deltaTime;
+float netTime;
+
+float disperseRate;
+
+uint randomize;
+
+uint trackMouse;
+
+uint drawCollider;
+
+uint firstPass;
+
+float rand(in float2 uv)
+{
+    float2 noise = (frac(sin(dot(uv ,float2(12.9898,78.233)*2.0)) * 43758.5453));
+    return abs(noise.x + noise.y) * 0.5;
+}
+
+
+float2 rand2(in float2 uv) {
+    float noiseX = (frac(sin(dot(uv, float2(12.9898,78.233) * 2.0)) * 43758.5453));
+    float noiseY = sqrt(1 - noiseX * noiseX);
+    return float2(noiseX, noiseY);
+}
+
+
+
+
+[numthreads(8,8,1)] //amount of threads per group
+void FunctionKernel (uint3 id : SV_DispatchThreadID)
+{
+    float timeFactor = 1000;//12.5664;
+    float offset = 0.8;
+    float interpolationPower = 6; //1.41421356237
+    float diagonalFactor = 0.5;//0.707106781188 //1.41421356237 //1-1.41421356237
+    float diagonalFactor2 = 0.5;
+    
+    int x = id.x;
+    int y = id.y;
+    float pixelX = id.x/((float)resolution);
+    float pixelY = id.y/((float)resolution);
+
+    float2 motionVector1 = float2(0,0); //rightward    positive x
+    float2 motionVector2 = float2(0,0); //leftward     negative x
+    float2 motionVector3 = float2(0,0); //upward       positive y
+    float2 motionVector4 = float2(0,0); //downward     negative y
+
+    float time1 = 0;
+    float time2 = 0;
+    float time3 = 0;
+    float time4 = 0;
+
+    
+    float percent;
+    float2 newVector = float2(0,0);
+    float2 temp = float2(0,0);
+
+    
+    float2 normal;
+
+
+    float lat = 0.5;
+    float diag = 0.5;
+
+    
+
+
+    //left Vector
+    id.x -= 1;
+    if(!(id.x <= 1||firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        temp = ((directionResult1[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(1,0)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            time1 += ((directionResult1[id.xy].z * timeFactor) * lat);
+            //time1 = max(time1, (directionResult1[id.xy].z * timeFactor));
+            motionVector1 += percent * temp;
+        }
+        //no leftward movement
+        temp = ((directionResult3[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(1,0)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time1 += ((directionResult3[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time1 = max(time1, (directionResult3[id.xy].z * timeFactor));
+            motionVector1 += percent * temp;
+        }
+        temp = ((directionResult4[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(1,0)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time1 += ((directionResult4[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time1 = max(time1, (directionResult4[id.xy].z * timeFactor));
+            motionVector1 += percent * temp;
+        }
+    }
+
+    //right vector
+    id.x += 2;
+    if(!(id.x >= resolution-2||firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        //no rightward movement
+        temp = ((directionResult2[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(-1,0)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            time2 += ((directionResult2[id.xy].z * timeFactor) * lat);
+            //time2 = max(time2, (directionResult2[id.xy].z * timeFactor));
+            motionVector2 += percent * temp;
+        }
+        temp = ((directionResult3[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(-1,0)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y) +offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time2 += ((directionResult3[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time2 = max(time2, (directionResult3[id.xy].z * timeFactor));
+            motionVector2 += percent * temp;
+        }
+        temp = ((directionResult4[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(-1,0)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time2 += ((directionResult4[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time2 = max(time2, (directionResult4[id.xy].z * timeFactor));
+            motionVector2 += percent * temp;
+        }
+    }
+
+    //bottom vector
+    id.x -= 1;
+    id.y -= 1;
+    if(!(id.y <= 1|| firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        temp = ((directionResult1[id.xy].xy-0.5)*2.0);
+        if(temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,1)), interpolationPower)*offset);
+            //percent = pow((abs(temp.y) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.y) - abs(temp.x) + 1) / 2;
+
+            //time3 += ((directionResult1[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time3 = max(time3, (directionResult1[id.xy].z * timeFactor));
+            motionVector3 += percent * temp;
+        }
+        temp = ((directionResult2[id.xy].xy-0.5)*2.0);
+        if(temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,1)), interpolationPower)*offset);
+            //percent = pow((abs(temp.y)+offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.y) - abs(temp.x) + 1) / 2;
+
+            //time3 += ((directionResult2[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time3 = max(time3, (directionResult2[id.xy].z * timeFactor));
+            motionVector3 += percent * temp;
+        }
+        temp = ((directionResult3[id.xy].xy-0.5)*2.0);
+        if(temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,1)), interpolationPower)*offset);
+            //percent = pow((abs(temp.y)+offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.y) - abs(temp.x) + 1) / 2;
+
+            time3 += ((directionResult3[id.xy].z * timeFactor) * lat);
+            //time3 = max(time3, (directionResult3[id.xy].z * timeFactor));
+            motionVector3 += percent * temp;
+        }
+        //no downward movement
+    }
+
+    //top vector
+    id.y += 2;
+    if(!(id.y >= resolution-2||firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        temp = ((directionResult1[id.xy].xy-0.5)*2.0);
+        if(temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,-1)), interpolationPower)*offset);
+            //percent = pow((abs(temp.y) +offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.y) - abs(temp.x) + 1) / 2;
+
+            //time4 += ((directionResult1[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time4 = max(time4, (directionResult1[id.xy].z * timeFactor));
+            motionVector4 += percent * temp;
+        }
+        temp = ((directionResult2[id.xy].xy-0.5)*2.0);
+        if(temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,-1)), interpolationPower)*offset);
+            //percent = pow((abs(temp.y) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.y) - abs(temp.x) + 1) / 2;
+
+            //time4 += ((directionResult2[id.xy].z * timeFactor) + deltaTime) * percent;
+            //time4 = max(time4, (directionResult2[id.xy].z * timeFactor));
+            motionVector4 += percent * temp;
+        }
+        //no upward movement
+        temp = ((directionResult4[id.xy].xy-0.5)*2.0);
+        if(temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,-1)), interpolationPower)*offset);
+            //percent = pow((abs(temp.y) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.y) - abs(temp.x) + 1) / 2;
+
+            time4 += ((directionResult4[id.xy].z * timeFactor) * lat);
+            //time4 = max(time4, (directionResult4[id.xy].z * timeFactor));
+            motionVector4 += percent * temp;
+        }
+    }
+    id.y -= 1;
+
+    
+    
+    //bottom left vector
+    id.x -= 1;
+    id.y -= 1;
+    
+    if(!(id.x <= 1||id.y <= 1||firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        temp = ((directionResult1[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            if(percent > 0.01) time1 += ((directionResult1[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time1 = max(time1, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+
+            //if(percent > 0.01) time3 += ((directionResult1[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time3 = max(time3, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult2[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time1 += ((directionResult2[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time1 = max(time1, (directionResult2[id.xy].z * timeFactor)* 0.5) ;
+            //time3 += ((directionResult2[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time3 = max(time3, (directionResult2[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult3[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //if(percent > 0.01) time1 += ((directionResult3[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time1 = max(time1, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+
+            if(percent > 0.01) time3 += ((directionResult3[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time3 = max(time3, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult4[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time1 += ((directionResult4[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time1 = max(time1, (directionResult4[id.xy].z * timeFactor)* 0.5) ;
+            //time3 += ((directionResult4[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time3 = max(time3, (directionResult4[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+    }
+
+    //top left vector
+    id.y += 2;
+    
+    if(!(id.x <= 1||id.y >= (resolution-2)||firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        temp = ((directionResult1[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            if(percent > 0.01) time1 += ((directionResult1[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time1 = max(time1, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+
+            //if(percent > 0.01) time4 += ((directionResult1[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time4 = max(time4, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector4 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult2[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time1 += ((directionResult2[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time1 = max(time1, (directionResult2[id.xy].z * timeFactor)* 0.5) ;
+            //time4 += ((directionResult2[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time4 = max(time4, (directionResult2[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector4 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult3[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time1 += ((directionResult3[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time1 = max(time1, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+            //time4 += ((directionResult3[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time4 = max(time4, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector4 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult4[id.xy].xy-0.5)*2.0);
+        if(temp.x >= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //if(percent > 0.01) time1 += ((directionResult4[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time1 = max(time1, (directionResult4[id.xy].z * timeFactor)* 0.5) ;
+
+            if(percent > 0.01) time4 += ((directionResult4[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time4 = max(time4, (directionResult4[id.xy].z * timeFactor)* 0.5) ;
+            motionVector1 += percent * temp * diagonalFactor2;
+            motionVector4 += percent * temp * diagonalFactor2;
+        }
+    }
+
+    //top right vector
+    id.x += 2;
+
+    if(!(id.x >= (resolution-2)||id.y >= (resolution-2)||firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        temp = ((directionResult1[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time2 += ((directionResult1[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time2 = max(time2, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+            //time4 += ((directionResult1[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time4 = max(time4, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+            motionVector2 += percent * temp * diagonalFactor2;
+            motionVector4 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult2[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            if(percent > 0.01) time2 += ((directionResult2[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time2 = max(time2, (directionResult2[id.xy].z * timeFactor)* 0.5) ;
+
+            //if(percent > 0.01) time4 += ((directionResult2[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time4 = max(time4, (directionResult2[id.xy].z * timeFactor)* 0.5) ;
+            motionVector2 += percent * temp * 0.5;
+            motionVector4 += percent * temp * 0.5;
+        }
+        temp = ((directionResult3[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time2 += ((directionResult3[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time2 = max(time2, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+            //time4 += ((directionResult3[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time4 = max(time4, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+            motionVector2 += percent * temp * diagonalFactor2;
+            motionVector4 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult4[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y <= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor*(-1))), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //if(percent > 0.01) time2 +=((directionResult4[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time2 = max(time2, (directionResult4[id.xy].z * timeFactor)* 0.5) ;
+
+            if(percent > 0.01) time4 += ((directionResult4[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time4 = max(time4, (directionResult4[id.xy].z * timeFactor)* 0.5) ;
+            motionVector2 += percent * temp * diagonalFactor2;
+            motionVector4 += percent * temp * diagonalFactor2;
+        }
+    }
+    
+    //bottom right vector
+    id.y -= 2;
+    
+    if(!(id.x >= (resolution-2)||id.y <= 1||firstPass == 1 || directionResult1[id.xy].w < 0.1)){
+        temp = ((directionResult1[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time2 += ((directionResult1[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time2 = max(time2, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+            //time3 += ((directionResult1[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time3 = max(time3, (directionResult1[id.xy].z * timeFactor)* 0.5) ;
+            motionVector2 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult2[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            if(percent > 0.01)time2 += ((directionResult2[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time2 = max(time2, (directionResult2[id.xy].z * timeFactor)* 0.5);
+
+            //if(percent > 0.01)time3 += ((directionResult2[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time3 = max(time3, (directionResult2[id.xy].z * timeFactor)* 0.5);
+            motionVector2 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult3[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x)+offset) / (abs(temp.x)+abs(temp.y)), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //if(percent > 0.01) time2 += ((directionResult3[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time2 = max(time2, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+
+            if(percent > 0.01) time3 += ((directionResult3[id.xy].z * timeFactor)) * diag;
+            //if(percent > 0.5) time3 = max(time3, (directionResult3[id.xy].z * timeFactor)* 0.5) ;
+            motionVector2 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+        temp = ((directionResult4[id.xy].xy-0.5)*2.0);
+        if(temp.x <= 0 || temp.y >= 0){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor)), interpolationPower)*offset);
+            //percent = pow((abs(temp.x) + offset) / (abs(temp.x)+abs(temp.y)+offset), interpolationPower);
+            //normal = normalize(temp);
+            //percent = (abs(temp.x) - abs(temp.y) + 1) / 2;
+
+            //time2 += ((directionResult4[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time2 = max(time2, (directionResult4[id.xy].z * timeFactor) * 0.5);
+            //time3 += ((directionResult4[id.xy].z * timeFactor) + deltaTime) * percent * 0.5;
+            //if(percent > 0.5) time3 = max(time3, (directionResult4[id.xy].z * timeFactor)* 0.5) ;
+            
+            motionVector2 += percent * temp * diagonalFactor2;
+            motionVector3 += percent * temp * diagonalFactor2;
+        }
+    }
+    
+
+    //reset position
+    id.y += 1;
+    id.x -= 1;
+
+    
+    //time1 += max(time1,directionResult1[id.xy].z * timeFactor);
+    //time2 += max(time1,directionResult2[id.xy].z * timeFactor);
+    //time3 += max(time1,directionResult3[id.xy].z * timeFactor);
+    //time4 += max(time1,directionResult4[id.xy].z * timeFactor);
+
+    /*
+    time1 *= 2;
+    time2 *= 2;
+    time3 *= 2;
+    time4 *= 2;
+    */
+    
+    /*
+    
+    
+    
+    
+    id.x -= 1;
+    time1 = directionResult1[id.xy].z * timeFactor * lat;
+
+    id.x += 2;
+    time2 = directionResult2[id.xy].z * timeFactor * lat;
+
+    id.x -= 1;
+    id.y -= 1;
+    time3 = directionResult3[id.xy].z * timeFactor * lat;
+
+    id.y += 2;
+    time4 = directionResult4[id.xy].z * timeFactor * lat;
+
+    id.y -= 1;
+    
+    float v = 0;
+
+    
+    id.y -= 1;
+    id.x -= 1;
+    
+    v = ((directionResult1[id.xy].z * timeFactor) + (directionResult3[id.xy].z * timeFactor)) * diag;
+    time1 += v;
+    time3 += v;
+
+    id.x += 2;
+
+    v = ((directionResult2[id.xy].z * timeFactor) + (directionResult3[id.xy].z * timeFactor)) * diag;
+    time2 += v;
+    time3 += v;
+
+    id.y += 2;
+    v = ((directionResult2[id.xy].z * timeFactor) + (directionResult4[id.xy].z * timeFactor)) * diag;
+    time2 += v;
+    time4 += v;
+
+    id.x -= 2;
+    v = ((directionResult1[id.xy].z * timeFactor) + (directionResult4[id.xy].z * timeFactor)) * diag;
+    time1 += v;
+    time4 += v;
+
+    id.x += 1;
+    id.y -= 1;
+    */
+    
+    
+    if(motionVector1.x > 0.001){
+        time1 += deltaTime;
+        
+    }
+    else{
+        time1 = 0;
+    }
+    if(motionVector2.x < -0.001){
+        time2 += deltaTime;
+        
+    }
+    else{
+        time2 = 0;
+    }
+    if(motionVector3.y > 0.001){
+        time3 += deltaTime;
+       
+    }
+    else{
+        time3 = 0;
+    }
+    if(motionVector4.y < -0.001){
+        time4 += deltaTime;
+       
+    }
+    else{
+        time4 = 0;
+    }
+
+    
+
+    
+    
+    
+
+    if(randomize == 1){
+        temp = (rand2(id.xy)-0.5);
+        if(temp.x > 0) {
+            motionVector1.x = temp.x;
+        }
+        else{
+            motionVector2.x = temp.x;
+        }
+
+        if(temp.y > 0) {
+            motionVector3.y = temp.y;
+        }
+        else{
+            motionVector4.y = temp.y;
+        }
+        
+    }
+
+    
+
+    
+    
+    
+    float timeRemainder = fmod(netTime,timeFactor);//6.28319
+    
+
+    if(trackMouse == 1 && drawCollider == 0){
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float2 directionFromInput = normalize(differenceFromInput);
+        float distanceFromInput = sqrt(pow(differenceFromInput.x,2) + pow(differenceFromInput.y,2));
+        float power = (pow(distanceFromInput*strengthFactor,strengthPower));
+
+
+
+
+        if(directionFromInput.x > 0){
+            motionVector1 += directionFromInput/power * dot(directionFromInput, float2(1,0));
+            //time1 =  timeRemainder * dot(directionFromInput, float2(1,0))/power;
+        }
+        if(directionFromInput.x < 0){
+            motionVector2 += directionFromInput/power * dot(directionFromInput, float2(-1,0));
+            //time2 =  timeRemainder * dot(directionFromInput, float2(-1,0))/power;
+        }
+        if(directionFromInput.y > 0){
+            motionVector3 += directionFromInput/power * dot(directionFromInput, float2(0,1));
+            //time3 =  timeRemainder * dot(directionFromInput, float2(0,1))/power;
+        }
+        if(directionFromInput.y < 0){
+            motionVector4 += directionFromInput/power * dot(directionFromInput, float2(0,-1));
+            //time4 =  timeRemainder * dot(directionFromInput, float2(0,-1))/power;
+        }
+
+        if(distanceFromInput <= 0.1){
+            
+            
+            float timeOffset = deltaTime * distanceFromInput * ((float)resolution);
+            
+            
+            time1 = timeOffset * max(0,dot(directionFromInput, float2(1,0)));
+            time2 = timeOffset * max(0,dot(directionFromInput, float2(-1,0)));
+            time3 = timeOffset * max(0,dot(directionFromInput, float2(0,1)));
+            time4 = timeOffset * max(0,dot(directionFromInput, float2(0,-1)));
+
+            /*
+            directionResult1[id.xy] = float4(1,0,time1,1);
+            directionResult2[id.xy] = float4(-1,0,time2,1);
+            directionResult3[id.xy] = float4(0,1,time3,1);
+            directionResult4[id.xy] = float4(0,-1,time4,1);
+            */
+            
+            
+        }
+
+        
+
+        
+    }
+
+    motionVector1 /= disperseRate;
+    motionVector2 /= disperseRate;
+    motionVector3 /= disperseRate;
+    motionVector4 /= disperseRate;
+
+    
+    
+    
+
+
+    
+
+    //float timeTemp = 0;
+    float directionTemp = 0;
+
+    id.x += 1;
+    if(id.x == resolution-3||directionResult1[id.xy].w < 0.1){
+        motionVector2.x = (abs(motionVector1.x) + abs(motionVector2.x))*(-1) * elasicity;
+        motionVector1.x = 0;
+
+        directionTemp = abs(motionVector3.x)*(-1) * elasicity;
+        motionVector3.x = abs(motionVector4.x)*(-1) * elasicity;
+        motionVector4.x = directionTemp;
+
+        time2 = time1;
+        //time2 = 0;
+
+        time1 = 0;
+        
+        //timeTemp = time3;
+        //time3 = time4;
+        //time4 = timeTemp;
+
+        //time3 = 0;
+        //time4 = 0;
+    }
+    id.x -= 2;
+    if(id.x == 2||directionResult1[id.xy].w < 0.1){
+        motionVector1.x = (abs(motionVector1.x) + abs(motionVector2.x)) * elasicity;
+        motionVector2.x = 0;
+
+        directionTemp = abs(motionVector3.x) * elasicity;
+        motionVector3.x = abs(motionVector4.x) * elasicity;
+        motionVector4.x = directionTemp;
+
+        
+        time1 = time2;
+        //time1 = 0;
+
+        time2 = 0;
+
+        
+        //timeTemp = time3;
+        //time3 = time4;
+        //time4 = timeTemp;
+
+        //time3 = 0;
+        //time4 = 0;
+    }
+    id.x += 1;
+    id.y += 1;
+    if(id.y == resolution-3||directionResult1[id.xy].w < 0.1){
+        motionVector4.y = (abs(motionVector3.y) + abs(motionVector4.y)) * (-1) * elasicity;
+        motionVector3.y = 0;
+
+        directionTemp = abs(motionVector1.y) * (-1) * elasicity;
+        motionVector1.y = abs(motionVector2.y) * (-1) * elasicity;
+        motionVector2.y = directionTemp;
+
+        //time1 = 0;
+        //time2 = 0;
+
+        //timeTemp = time1;
+        //time1 = time2;
+        //time2 = timeTemp;
+        
+        time4 = time3;
+        //time4 = 0;
+
+        time3 = 0;
+    }
+    id.y -= 2;
+    if(id.y == 2||directionResult1[id.xy].w < 0.1){
+        motionVector3.y = (abs(motionVector3.y) + abs(motionVector4.y)) * elasicity;
+        motionVector4.y = 0;
+
+        directionTemp = abs(motionVector1.y) * elasicity;
+        motionVector1.y = abs(motionVector2.y) * elasicity;
+        motionVector2.y = directionTemp;
+
+        //time1 = 0;
+        //time2 = 0;
+
+        //timeTemp = time1;
+        //time1 = time2;
+        //time2 = timeTemp;
+        
+        time3 = time4;
+        //time3 = 0;
+
+        time4 = 0;
+    }
+    id.y += 1;
+
+    float magnitude1 = sqrt(pow(motionVector1.x, 2) + pow(motionVector1.y,2));
+    float magnitude2 = sqrt(pow(motionVector2.x, 2) + pow(motionVector2.y,2));
+    float magnitude3 = sqrt(pow(motionVector3.x, 2) + pow(motionVector3.y,2));
+    float magnitude4 = sqrt(pow(motionVector4.x, 2) + pow(motionVector4.y,2));
+
+    /*
+    time1 = time1 + (deltaTime/timeFactor);
+    time2 = time2 + (deltaTime/timeFactor);
+    time3 = time3 + (deltaTime/timeFactor);
+    time4 = time4 + (deltaTime/timeFactor);
+    */
+
+    
+    
+        
+    
+    
+
+    
+    // netKineticEnergy = (sound pressure)
+    float netKineticEnergy = magnitude1 + magnitude2 + magnitude3 + magnitude4;
+
+    
+
+    
+        
+    
+    //magnitude/=4;
+    // netKineticEnergy = planks constant * speed of light / wavelength
+    
+    //float waveLength = 1.0 / totalEnergy;
+
+    //netTime/= 4;
+    //netTime = fmod(netTime,6.28319);
+    
+    
+    float phase1 = magnitude1*sin(6.28319*(time1)*frequency);
+    float phase2 = magnitude2*sin(6.28319*(time2)*frequency);
+    float phase3 = magnitude3*sin(6.28319*(time3)*frequency);
+    float phase4 = magnitude4*sin(6.28319*(time4)*frequency);
+
+    float amplitude = phase1 + phase2 + phase3 + phase4;
+
+
+    
+    
+    
+    
+    float timeCutOff = timeFactor * 0.9; //6.28319;
+    if (time1 >= timeCutOff){
+        time1 -= timeCutOff;
+        //time1 = 0;
+    }
+    if (time2 >= timeCutOff){
+        time2 -= timeCutOff;
+        //time2 = 0;
+    }
+    if (time3 >= timeCutOff){
+        time3 -= timeCutOff;
+        //time3 = 0;
+    }
+    if (time4 >= timeCutOff){
+        time4 -= timeCutOff;
+        //time4 = 0;
+    }
+    
+    
+    
+
+
+    
+    
+
+    
+
+    //bounces *= magnitude;
+    //bounces = 0.00;
+
+    //directionResult[id.xy] = float4(clamp((motionVector/2.0)+.5,0,1),time,directionResult[id.xy].w);
+    
+    //if clear pass
+    if(firstPass == 1){
+        directionResult1[id.xy] = float4(.5,.5,0,1);
+        directionResult2[id.xy] = float4(.5,.5,0,1);
+        directionResult3[id.xy] = float4(.5,.5,0,1);
+        directionResult4[id.xy] = float4(.5,.5,0,1);
+    }
+    else{
+        //if collider exists
+        if(directionResult1[id.xy].w < 0.1){
+            directionResult1[id.xy] = float4(0,0,0,0);
+            directionResult2[id.xy] = float4(0,0,0,0);
+            directionResult3[id.xy] = float4(0,0,0,0);
+            directionResult4[id.xy] = float4(0,0,0,0);
+        } 
+        else{
+            //if no collider exists
+            /*
+            directionResult1[id.xy] = float4(clamp(((motionVector1+motionVector3+motionVector4)/2.0)+.5,0,1),time, 1);
+            directionResult2[id.xy] = float4(clamp(((motionVector2+motionVector3+motionVector4)/2.0)+.5,0,1),time, 1);
+            directionResult3[id.xy] = float4(clamp(((motionVector1+motionVector2+motionVector3)/2.0)+.5,0,1),time, 1);
+            directionResult4[id.xy] = float4(clamp(((motionVector1+motionVector2+motionVector4)/2.0)+.5,0,1),time, 1);
+            */
+
+            directionResult1[id.xy] = float4(clamp(((motionVector1)/2.0)+.5,0,1),time1 / timeFactor, 1);
+            directionResult2[id.xy] = float4(clamp(((motionVector2)/2.0)+.5,0,1),time2 / timeFactor, 1);
+            directionResult3[id.xy] = float4(clamp(((motionVector3)/2.0)+.5,0,1),time3 / timeFactor, 1);
+            directionResult4[id.xy] = float4(clamp(((motionVector4)/2.0)+.5,0,1),time4 / timeFactor, 1);
+        }
+    }
+
+    
+    
+    
+
+        //Directional
+    //computeResult[id.xy] = float4(directionResult[id.xy].x * magnitude, directionResult[id.xy].y * magnitude,0,1);
+    
+    
+        //Amplitude
+    //computeResult[id.xy] = float4(amplitude, amplitude, amplitude,1);
+
+        //Net Time
+    //netTime = ((time1+time2+time3+time4)/4);
+
+    //computeResult[id.xy] = float4(time1, time2, time3, 1); //6.28/100
+    //computeResult[id.xy] = float4(netTime, netTime, netTime, 1);
+
+    //computeResult[id.xy] = float4(netKineticEnergy, netTime, 0, 1);
+
+        //Directional Time
+    //computeResult[id.xy] = float4(time1, time2, time3, 1);
+    
+        //Net Energy
+    computeResult[id.xy] = float4(netKineticEnergy, netKineticEnergy,netKineticEnergy,1);
+    
+        //UVs
+    //computeResult[id.xy] = float4(pixelX, pixelY, 0,1);
+
+
+    float4 blankDirection = float4(0,0,0,0);
+
+    
+    if(id.x >= resolution-2 || id.x <= 1 || id.y >= resolution-2 || id.y <= 1){
+        computeResult[id.xy] = float4(1, 0, 0, 1);
+        directionResult1[id.xy] = blankDirection;
+        directionResult2[id.xy] = blankDirection;
+        directionResult3[id.xy] = blankDirection;
+        directionResult4[id.xy] = blankDirection;
+    }
+    
+
+    if(directionResult1[id.xy].w < 0.1){
+        computeResult[id.xy] = float4(1, 0, 0, 1);
+    }
+
+
+    if(drawCollider == 1){
+        //draw colliders
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float distanceFromInput = sqrt((differenceFromInput.x * differenceFromInput.x) + (differenceFromInput.y * differenceFromInput.y));
+        if(distanceFromInput <= 0.01){
+            directionResult1[id.xy] = float4(0,0,0,0);
+            directionResult2[id.xy] = float4(0,0,0,0);
+            directionResult3[id.xy] = float4(0,0,0,0);
+            directionResult4[id.xy] = float4(0,0,0,0);
+        }
+    }
+    else{
+        //erase colliders
+        /*
+        if(trackMouse == 1){
+            if(abs(id.x - mouseInputX) <= 3 && abs(id.y - mouseInputY) <= 3){
+                directionResult1[id.xy] = float4(directionResult1[id.xy].x,directionResult1[id.xy].y,directionResult1[id.xy].z,1);
+                directionResult2[id.xy] = float4(directionResult2[id.xy].x,directionResult2[id.xy].y,directionResult2[id.xy].z,1);
+                directionResult3[id.xy] = float4(directionResult3[id.xy].x,directionResult3[id.xy].y,directionResult3[id.xy].z,1);
+                directionResult4[id.xy] = float4(directionResult4[id.xy].x,directionResult4[id.xy].y,directionResult4[id.xy].z,1);
+            }
+        }
+        */
+    }
+    
+
+    
+    
+}
+
+

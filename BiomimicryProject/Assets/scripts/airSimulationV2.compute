@@ -1,0 +1,482 @@
+#pragma kernel FunctionKernel
+
+
+RWTexture2D<float4> computeResult;
+RWTexture2D<float4> directionResult;
+uint resolution;
+
+uint mouseInputX;
+uint mouseInputY;
+
+float strengthFactor;
+float strengthPower;
+
+float elasicity;
+
+float frequency;
+float deltaTime;
+
+float disperseRate;
+
+uint randomize;
+
+uint trackMouse;
+
+uint drawCollider;
+
+uint firstPass;
+
+float rand(in float2 uv)
+{
+    float2 noise = (frac(sin(dot(uv ,float2(12.9898,78.233)*2.0)) * 43758.5453));
+    return abs(noise.x + noise.y) * 0.5;
+}
+
+
+float2 rand2(in float2 uv) {
+    float noiseX = (frac(sin(dot(uv, float2(12.9898,78.233) * 2.0)) * 43758.5453));
+    float noiseY = sqrt(1 - noiseX * noiseX);
+    return float2(noiseX, noiseY);
+}
+
+
+
+
+[numthreads(8,8,1)] //amount of threads per group
+void FunctionKernel (uint3 id : SV_DispatchThreadID)
+{
+    
+    int x = id.x;
+    int y = id.y;
+    float pixelX = id.x/((float)resolution);
+    float pixelY = id.y/((float)resolution);
+
+
+    
+    
+    id.x -= 1;
+    float2 left = (directionResult[id.xy].xy-0.5)*2.0;
+    float leftTime = directionResult[id.xy].z*10 + deltaTime;
+    float leftBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.x += 2;
+    float2 right = (directionResult[id.xy].xy-0.5)*2.0;
+    float rightTime = directionResult[id.xy].z*10+ deltaTime;
+    float rightBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.x -= 1;
+    id.y -= 1;
+    float2 bottom = (directionResult[id.xy].xy-0.5)*2.0;
+    float bottomTime = directionResult[id.xy].z*10+ deltaTime;
+    float bottomBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.y += 2;
+    float2 top = (directionResult[id.xy].xy-0.5)*2.0;
+    float topTime = directionResult[id.xy].z*10+ deltaTime;
+    float topBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.x -= 1;
+    id.y -= 2;
+    float2 bottomLeft = (directionResult[id.xy].xy-0.5)*2.0;
+    float bottomLeftTime = directionResult[id.xy].z*10+ deltaTime;
+    float bottomLeftBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.y += 2;
+    float2 topLeft = (directionResult[id.xy].xy-0.5)*2.0;
+    float topLeftTime = directionResult[id.xy].z*10+ deltaTime;
+    float topLeftBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.x += 2;
+    float2 topRight = (directionResult[id.xy].xy-0.5)*2.0;
+    float topRightTime = directionResult[id.xy].z*10+ deltaTime;
+    float topRightBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.y -= 2;
+    float2 bottomRight = (directionResult[id.xy].xy-0.5)*2.0;
+    float bottomRightTime = directionResult[id.xy].z*10+ deltaTime;
+    float bottomRightBounces = max(0,(directionResult[id.xy].w - 0.9) * 100);
+    id.y += 1;
+    id.x -= 1;
+
+    
+
+    
+    if(id.x == resolution-2||firstPass == 1){
+        right = float2(0,0);
+        topRight = float2(0,0);
+        bottomRight = float2(0,0);
+
+        //rightBounces = 0;
+        //bottomRightBounces = 0;
+        //topRightBounces = 0;
+    }
+    if(id.x == 1||firstPass == 1){
+        left = float2(0,0);
+        bottomLeft = float2(0,0);
+        topLeft = float2(0,0);
+
+        //leftBounces = 0;
+        //bottomLeftBounces = 0;
+        //topLeftBounces = 0;
+    }
+    if(id.y == resolution-2||firstPass == 1){
+        top = float2(0,0);
+        topLeft = float2(0,0);
+        topRight = float2(0,0);
+
+        //topBounces = 0;
+        //topLeftBounces = 0;
+        //topRightBounces = 0;
+    }
+    if(id.y == 1||firstPass == 1){
+        bottom = float2(0,0);
+        bottomLeft = float2(0,0);
+        bottomRight = float2(0,0);
+
+        //bottomBounces = 0;
+        //bottomLeftBounces = 0;
+        //bottomRightBounces = 0;
+    }
+
+    float avgBounces = (leftBounces + rightBounces + bottomBounces + topBounces + bottomLeftBounces + topLeftBounces + topRightBounces + bottomRightBounces) / 8;
+    //avgBounces = 0;
+
+    float minBounces = min(min(min(min(min(min(min(leftBounces,rightBounces), bottomBounces), topBounces), bottomLeftBounces), topLeftBounces), topRightBounces), bottomRightBounces);
+    
+
+    bool skipBounce = (abs(avgBounces - minBounces) < 1);
+
+    
+
+    float2 motionVector = float2(0,0);
+
+
+    
+
+    /*
+    if(left.x > 0.01){
+        motionVector += left * 4;
+    }
+    if(right.x < -0.01){
+        motionVector += right * 4;
+    }
+    if(bottom.y > 0.01){
+        motionVector += bottom * 4;
+    }
+    if(top.y < -0.01){
+        motionVector += top * 4;
+    }
+    */
+
+
+    /*
+    if(left.x > 0.01){
+        motionVector += left *lateralFactor;
+    }
+    if(right.x < -0.01){
+        motionVector += right *lateralFactor;
+    }
+        */
+
+    //float diagonalFactor = 0.707106781187;
+    float diagonalFactor = 1;
+    //float time = directionResult[id.xy].z;
+    float time = 0;
+    
+        //motionVector += (1.0 - (2.0 * abs( 0.5 - abs(bottomRight.x/(abs(bottomRight.x)+abs(bottomRight.y)))))) * 0.5 * bottomRight;
+    float percent;
+    float2 newVector = float2(0,0);
+
+    
+    if(topBounces > avgBounces || skipBounce){
+    percent = max(0,dot(normalize(top), float2(0,-1)));
+        if(top.y < 0){
+        //percent = abs(top.y)/(abs(top.y)+abs(top.x));
+        newVector += percent * top;
+        time += percent * topTime;
+        motionVector += newVector;
+        newVector = float2(0,0);
+        }
+    }
+
+    if(bottomBounces > avgBounces || skipBounce){
+    percent = max(0,dot(normalize(bottom), float2(0,1)));
+        if(bottom.y > 0){
+        //percent = abs(bottom.y)/(abs(bottom.y)+abs(bottom.x));
+        newVector += percent * bottom;
+        time += percent * bottomTime;
+        motionVector += newVector;
+        newVector = float2(0,0);
+        }
+    }
+
+    if(leftBounces > avgBounces || skipBounce){
+    percent = max(0,dot(normalize(left), float2(1,0)));
+        if(left.x > 0){
+        //percent = abs(left.x)/(abs(left.y)+abs(left.x));
+        newVector += percent * left;
+        time += percent * leftTime;
+        motionVector += newVector;
+        newVector = float2(0,0);
+        }
+    }
+
+    if(rightBounces > avgBounces || skipBounce){
+    percent =  max(0,dot(normalize(right), float2(-1,0)));
+        if(right.x < 0){
+        //percent = abs(right.x)/(abs(right.y)+abs(right.x));
+        newVector += percent * right;
+        time += percent * rightTime;
+        motionVector += newVector;
+        newVector = float2(0,0);
+        }
+    }
+    
+    
+    if(bottomRightBounces > avgBounces || skipBounce){
+    percent = max(0,dot(normalize(bottomRight), float2(-1,1)));
+    newVector += percent * bottomRight * diagonalFactor;
+    time += percent * bottomRightTime;
+    motionVector += newVector;
+    newVector = float2(0,0);
+    }
+
+    if(bottomLeftBounces > avgBounces || skipBounce){
+    percent = max(0,dot(normalize(bottomLeft), float2(1,1)));
+    newVector += percent * bottomLeft * diagonalFactor;
+    time += percent * bottomLeftTime;
+    motionVector += newVector;
+    newVector = float2(0,0);
+    }
+
+    if(topRightBounces > avgBounces || skipBounce){
+    percent = max(0,dot(normalize(topRight), float2(-1,-1)));
+    newVector += percent * topRight * diagonalFactor;
+    time += percent * topRightTime;
+    motionVector += newVector;
+    newVector = float2(0,0);
+    }
+
+    if(topLeftBounces > avgBounces || skipBounce){
+    percent = max(0,dot(normalize(topLeft), float2(1,-1)));
+    newVector += percent * topLeft * diagonalFactor;
+    time += percent * topLeftTime;
+    motionVector += newVector;
+    newVector = float2(0,0);
+    }
+    
+    
+
+    
+
+    /*
+    if(bottom.y > 0.01){
+        motionVector += abs(bottom.y/(abs(bottom.x)+abs(bottom.y))) * 0.5 * bottom;
+    }
+        */
+
+
+
+    /*
+    if(right.x < -0.01){
+        motionVector += abs(right.x/(abs(right.x)+abs(right.y))) * 0.5 * right;
+    }
+
+    
+    if(left.x > 0.01){
+        motionVector += abs(left.x/(abs(left.x)+abs(left.y))) * 0.5 * left;
+    }
+
+    if(topRight.x < -0.01 && topRight.y < -0.01){
+        motionVector += (1.0 - (2.0 * abs( 0.5 - abs(topRight.x/(abs(topRight.x)+abs(topRight.y)))))) * 0.5 * topRight;
+    }
+
+    if(top.y < -0.01){
+        motionVector += abs(top.y/(abs(top.x)+abs(top.y))) * 0.5 * top;
+    }
+
+    if(topLeft.x > 0.01 && topLeft.y < -0.01){
+        motionVector += (1.0 - (2.0 * abs( 0.5 - abs(topLeft.x/(abs(topLeft.x)+abs(topLeft.y)))))) * 0.5 * topLeft;
+    }
+        */
+    
+        
+
+    
+
+
+    
+    
+
+
+    
+
+
+    /*
+    if(bottomLeft.x > 0.01 && bottomLeft.y > 0.01){
+        motionVector += bottomLeft;
+    }
+
+    if(topLeft.x > 0.01 && topLeft.y < -0.01){
+        motionVector += topLeft;
+    }
+
+    if(topRight.x < -0.01 && topRight.y < -0.01){
+        motionVector += topRight;
+    }
+
+    if(bottomRight.x < -0.01 && bottomRight.y > 0.01){
+        motionVector += bottomRight;
+    }
+    */
+    
+
+    
+    
+
+    
+    //avgBounces /= disperseRate;
+    //time -= deltaTime*disperseRate/100;
+    
+
+    if(trackMouse == 1 && drawCollider == 0){
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float2 directionFromInput = normalize(differenceFromInput);
+        float distanceFromInput = sqrt((differenceFromInput.x * differenceFromInput.x) + (differenceFromInput.y * differenceFromInput.y));
+        float power = (pow(distanceFromInput*strengthFactor,strengthPower));
+        motionVector += directionFromInput/power;
+
+        if(power > 0.1) directionResult[id.xy] = float4(0,0,0,0.8);
+
+        
+    }
+
+    motionVector /= disperseRate;
+
+    
+
+    if(randomize == 1){
+        motionVector = (rand2(id.xy)-0.5);
+    }
+
+
+    float bounces = 0;
+    id.x += 1;
+    if(id.x == resolution-1||directionResult[id.xy].w < 0.1){
+        if(abs(motionVector.x) > 0.01){
+            motionVector.x = abs(motionVector.x)*(-1) * elasicity;
+            bounces = bounces + 1;
+        }
+    }
+    id.x -= 2;
+    if(id.x == 0||directionResult[id.xy].w < 0.1){
+        if(abs(motionVector.x) > 0.01){
+            motionVector.x = abs(motionVector.x) * elasicity;
+            bounces = bounces + 1;
+        }
+    }
+    id.x += 1;
+    id.y += 1;
+    if(id.y == resolution-1||directionResult[id.xy].w < 0.1){
+        if(abs(motionVector.y) > 0.01){
+            motionVector.y = abs(motionVector.y)*(-1) * elasicity;
+            bounces = bounces + 1;
+        }
+    }
+    id.y -= 2;
+    if(id.y == 0||directionResult[id.xy].w < 0.1){
+        if(abs(motionVector.y) > 0.01){
+            motionVector.y = abs(motionVector.y) * elasicity;
+            bounces = bounces + 1;
+        }
+    }
+    id.y += 1;
+
+    float magnitude = sqrt(pow(motionVector.x,2) + pow(motionVector.y,2));
+
+    // energy = planks constant * speed of light / wavelength
+    float waveLength = 1.0 / magnitude;
+
+    
+    float phase = magnitude*(sin(time*frequency) + 1);
+
+    if (time >= 6.28) time = 0;
+
+    time/=10;
+
+    if(magnitude < 0.85 && magnitude > 0.05) bounces = bounces + ceil(avgBounces);
+    //bounces *= magnitude;
+    bounces /= 100;
+    //bounces = 0.00;
+
+    //directionResult[id.xy] = float4(clamp((motionVector/2.0)+.5,0,1),time,directionResult[id.xy].w);
+    
+
+    
+
+    if(directionResult[id.xy].w < .2){
+        directionResult[id.xy] = float4(clamp((motionVector/2.0)+.5,0,1),time,0);
+    } 
+    else{
+        directionResult[id.xy] = float4(clamp((motionVector/2.0)+.5,0,1),time, 0.9 + bounces);
+    }
+
+    if(firstPass == 1){
+        directionResult[id.xy] = float4(.5,.5,0,0.9);
+    }
+    
+    //float percent = abs(min(bottomLeft.x, bottomLeft.y)/max(bottomLeft.x, bottomLeft.y));
+    
+
+    
+    //computeResult[id.xy] = float4(directionResult[id.xy].x * magnitude, directionResult[id.xy].y * magnitude,0,1);
+    computeResult[id.xy] = float4(phase*magnitude, phase*magnitude, phase*magnitude,1);
+    //computeResult[id.xy] = float4(magnitude, magnitude,magnitude,1);
+    
+    //computeResult[id.xy] = float4((bounces*30), (bounces*30), (bounces*30),1);
+    //computeResult[id.xy] = float4(directionResult[id.xy].w-0.9, directionResult[id.xy].w-0.9,directionResult[id.xy].w-0.9,1);
+
+    //computeResult[id.xy] = float4(pixelX, pixelY, 0,1);
+
+
+    
+
+    /*
+    if(id.x == resolution-1){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+    if(id.x == 0){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+    if(id.y == resolution-1){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+    if(id.y == 0){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+    */
+
+    if(directionResult[id.xy].w < 0.1){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+    if(directionResult[id.xy].w < 0.1){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+    if(directionResult[id.xy].w < 0.1){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+    if(directionResult[id.xy].w < 0.1){
+        computeResult[id.xy] = float4(1, 1, 1, 1);
+    }
+
+
+    if(drawCollider == 1){
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float distanceFromInput = sqrt((differenceFromInput.x * differenceFromInput.x) + (differenceFromInput.y * differenceFromInput.y));
+        if(distanceFromInput <= 0.01) directionResult[id.xy] = float4(0,0,0,0);
+    }
+    else{
+        if(trackMouse == 1){
+            if(abs(id.x - mouseInputX) <= 3 && abs(id.y - mouseInputY) <= 3) directionResult[id.xy] = float4(directionResult[id.xy].x,directionResult[id.xy].y,directionResult[id.xy].z,0.9);
+        }
+    }
+    
+
+    
+    
+}
+
+

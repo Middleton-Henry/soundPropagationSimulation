@@ -1,0 +1,295 @@
+#pragma kernel FunctionKernel
+
+
+RWTexture2D<float4> computeResult;
+RWTexture2D<float4> directionResult;
+uint resolution;
+
+uint mouseInputX;
+uint mouseInputY;
+
+float strengthFactor;
+float strengthPower;
+
+float elasicity;
+
+float disperseRate;
+
+uint randomize;
+
+uint trackMouse;
+
+uint firstPass;
+
+float rand(in float2 uv)
+{
+    float2 noise = (frac(sin(dot(uv ,float2(12.9898,78.233)*2.0)) * 43758.5453));
+    return abs(noise.x + noise.y) * 0.5;
+}
+
+
+float2 rand2(in float2 uv) {
+    float noiseX = (frac(sin(dot(uv, float2(12.9898,78.233) * 2.0)) * 43758.5453));
+    float noiseY = sqrt(1 - noiseX * noiseX);
+    return float2(noiseX, noiseY);
+}
+
+
+
+
+[numthreads(8,8,1)] //amount of threads per group
+void FunctionKernel (uint3 id : SV_DispatchThreadID)
+{
+    if(firstPass == 1){
+        directionResult[id.xy] = 0.5;
+    }
+
+    float pixelX = id.x/((float)resolution);
+    float pixelY = id.y/((float)resolution);
+
+
+
+    
+    
+
+    //float lateralFactor = 0.70710678 * 2.0;
+    //float diagonalFactor = 0.292893218812 * 2.0;
+
+    float lateralFactor = 0.0125;
+    float diagonalFactor = 0.0125;
+
+    //float lateralFactor = 0.70710678/8;
+    //float diagonalFactor = 0.292893218812/8;
+
+    
+
+    float newX = 0;
+    float newY = 0;
+
+
+    /*
+    float newX = max(0, (directionResult[id.xy + uint2(-1,0)].x-0.5)*lateralFactor) + (min(0, (directionResult[id.xy + uint2(1,0)].x-0.5)*lateralFactor));
+    float newY = max(0, (directionResult[id.xy + uint2(0,-1)].y-0.5)*lateralFactor) + (min(0, (directionResult[id.xy + uint2(0,1)].y-0.5)*lateralFactor));
+
+    float2 bottomLeft = (directionResult[id.xy + uint2(-1,-1)].xy-0.5) * diagonalFactor;
+    float2 topLeft = (directionResult[id.xy + uint2(-1,1)].xy-0.5) * diagonalFactor;
+    float2 bottomRight = (directionResult[id.xy + uint2(1,-1)].xy-0.5) * diagonalFactor;
+    float2 topRight = (directionResult[id.xy + uint2(1,1)].xy-0.5) * diagonalFactor;
+    */
+
+    /*
+    id.x -= 1;
+    newX = max(0, (directionResult[id.xy].x-0.5)*lateralFactor);
+    id.x += 2;
+    newX += (min(0, (directionResult[id.xy].x-0.5)*lateralFactor));
+    id.x -= 1;
+
+    id.y -= 1;
+    newY = max(0, (directionResult[id.xy].y-0.5)*lateralFactor);
+    id.y += 2;
+    newY += (min(0, (directionResult[id.xy].y-0.5)*lateralFactor));
+    id.y -= 1;
+    */
+
+    
+
+    
+    
+    
+    id.x -= 1;
+    float2 left = normalize(directionResult[id.xy].xy-0.5);
+    id.x += 2;
+    float2 right = normalize(directionResult[id.xy].xy-0.5);
+    id.x -= 1;
+
+    if(left.x > 0){
+        float percent = abs(left.x)/sqrt(pow(left.x,2.0)+pow(left.y,2.0));
+        newX += percent*left.x * lateralFactor;
+        //newY += (1-percent)*left.y;
+
+    }
+    if(right.x < 0){
+        float percent = abs(right.x)/sqrt(pow(right.x,2.0)+pow(right.y,2.0));
+        newX += percent*right.x * lateralFactor;
+        //newY += (1-percent)*right.y;
+    }
+
+    id.y -= 1;
+    float2 bottom = normalize(directionResult[id.xy].xy-0.5);
+    id.y += 2;
+    float2 top = normalize(directionResult[id.xy].xy-0.5);
+    id.y -= 1;
+
+    if(bottom.y > 0) {
+        float percent = abs(bottom.x)/sqrt(pow(bottom.x,2.0)+pow(bottom.y,2.0));
+        //newX += percent*bottom.x;
+        newY += (1-percent)*bottom.y * lateralFactor;
+    }
+
+    if(top.y < 0){ 
+        float percent = abs(top.x)/sqrt(pow(top.x,2.0)+pow(top.y,2.0));
+        //newX += percent*top.x;
+        newY += (1-percent)*top.y * lateralFactor;
+    }
+    
+
+    
+    
+
+    
+
+    
+
+    id.x -= 1;
+    id.y -= 1;
+    float2 bottomLeft = (directionResult[id.xy].xy-0.5);
+
+    id.y += 2;
+    float2 topLeft = (directionResult[id.xy].xy-0.5);
+
+    id.x += 2;
+    float2 topRight = (directionResult[id.xy].xy-0.5);
+
+    id.y -= 2;
+    float2 bottomRight = (directionResult[id.xy].xy-0.5);
+
+    id.y += 1;
+    id.x -= 1;
+    
+
+    
+    /*
+    
+    if(bottomLeft.x > 0 && bottomLeft.y > 0){
+        float percent = abs(min(bottomLeft.x, bottomLeft.y)/max(bottomLeft.x, bottomLeft.y));
+        newX +=  percent * bottomLeft.x  * diagonalFactor;
+        newY += percent * bottomLeft.y  * diagonalFactor;
+    }
+    if(topLeft.x > 0 && topLeft.y < 0){
+        float percent = abs(min(topLeft.x, topLeft.y)/max(topLeft.x, topLeft.y));
+        newX += percent * topLeft.x  * diagonalFactor;
+        newY += percent * topLeft.y  * diagonalFactor;
+    }
+    if(bottomRight.x < 0 && bottomRight.y > 0){
+        float percent = abs(min(bottomRight.x, bottomRight.y)/max(bottomRight.x, bottomRight.y));
+        newX +=  percent * bottomRight.x  * diagonalFactor;
+        newY += percent * bottomRight.y  * diagonalFactor;
+    }
+    if(topRight.x < 0 && topRight.y < 0){
+        float percent = abs(min(topRight.x, topRight.y)/max(topRight.x, topRight.y));
+        newX += percent * topRight.x  * diagonalFactor;
+        newY += percent * topRight.y  * diagonalFactor;
+    }
+        */
+        
+        
+
+   
+    
+        
+        
+
+
+
+
+    
+    if(bottomLeft.x > 0 && bottomLeft.y > 0){
+        newX += bottomLeft.x *diagonalFactor;
+        newY += bottomLeft.y *diagonalFactor;
+    }
+    if(topLeft.x > 0 && topLeft.y < 0){
+        newX += topLeft.x *diagonalFactor;
+        newY += topLeft.y *diagonalFactor;
+    }
+    if(bottomRight.x < 0 && bottomRight.y > 0){
+        newX += bottomRight.x *diagonalFactor;
+        newY += bottomRight.y *diagonalFactor;
+    }
+    if(topRight.x < 0 && topRight.y < 0){
+        newX += topRight.x *diagonalFactor;
+        newY += topRight.y *diagonalFactor;
+    }
+    
+    
+
+    //newX /= 8.0;
+    //newY /= 8.0;
+
+    newX = newX*(1.0-disperseRate) + (topLeft.x + top.x + topRight.x + left.x + right.x + bottomLeft.x + bottom.x + bottomRight.x)*disperseRate;
+    newY = newY*(1.0-disperseRate) + (topLeft.y + top.y + topRight.y + left.y + right.y + bottomLeft.y + bottom.y + bottomRight.y)*disperseRate;
+
+
+
+
+    
+    if(pixelX == 1){
+        newX = abs(newX)*(-1)*elasicity;
+    }
+    if(pixelX == 0){
+        newX = abs(newX)*elasicity;
+    }
+    if(pixelY == 1){
+        newY = abs(newY)*(-1)*elasicity;
+    }
+    if(pixelY == 0){
+        newY = abs(newY)*elasicity;
+    }
+        
+        
+
+    float2 motionVector = normalize(float2(newX, newY)/8.0);
+
+    if(trackMouse == 1){
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float2 directionFromInput = normalize(differenceFromInput);
+        float distanceFromInput = sqrt((differenceFromInput.x * differenceFromInput.x) + (differenceFromInput.y * differenceFromInput.y));
+        motionVector += (directionFromInput/(pow(distanceFromInput*strengthFactor,strengthPower)));
+    }
+    
+
+    
+    directionResult[id.xy] = float4(clamp(((normalize(motionVector)/2+.5)),0,1),0,1);
+
+
+    if(randomize == 1){
+        directionResult[id.xy] = float4((rand2(id.xy)-0.5)/10.0,0,1);
+    }
+
+    
+
+    //float unitStrength = abs(length(motionVector));
+    //motionVector = normalize(motionVector)/4;
+    float unitStrength = sqrt((pow(motionVector.x,2)) + pow(motionVector.y,2));
+    // (value - min)/(max -min)
+    
+    float R = 0;
+    float G = 0;
+    float B = 0;
+    float BPeak = 1.0;
+    float RPeak = 1.5;
+    float GPeak = 2.0;
+
+    if(unitStrength < BPeak){
+        B = (unitStrength - 0.0) / (BPeak - 0.0);
+    }
+    if(unitStrength > BPeak){
+        B = 1.0-(unitStrength - BPeak) / (RPeak - BPeak);
+        R = (unitStrength - BPeak) / (RPeak - BPeak);
+    }
+    if(unitStrength > GPeak){
+        R = 1.0-(unitStrength - RPeak) / (GPeak - RPeak);
+        G = (unitStrength - RPeak) / (GPeak - RPeak);
+    }
+    
+    //computeResult[id.xy] = float4(R,0,B,1);
+    //computeResult[id.xy] = directionResult[id.xy];
+
+    computeResult[id.xy] = float4(abs(motionVector.x), abs(motionVector.y),B,1);
+    //computeResult[id.xy] = float4(distanceFromInput,distanceFromInput,distanceFromInput,1);
+    
+
+    
+    
+}
+
+

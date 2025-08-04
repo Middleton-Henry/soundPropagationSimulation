@@ -1,0 +1,973 @@
+#pragma kernel FunctionKernel
+
+
+RWTexture2D<float4> computeResult;
+
+RWTexture2D<float4> directionResultPositiveX;
+RWTexture2D<float4> directionResultNegativeX;
+RWTexture2D<float4> directionResultPositiveY;
+RWTexture2D<float4> directionResultNegativeY;
+
+RWTexture2D<float4> directionResultPositiveXPositiveY;
+RWTexture2D<float4> directionResultNegativeXPositiveY;
+RWTexture2D<float4> directionResultPositiveXNegativeY;
+RWTexture2D<float4> directionResultNegativeXNegativeY;
+
+uint resolution;
+
+uint mouseInputX;
+uint mouseInputY;
+
+float strengthFactor;
+float strengthPower;
+
+float elasicity;
+
+float frequency;
+float deltaTime;
+float netTime;
+
+float disperseRate;
+
+uint randomize;
+
+uint trackMouse;
+
+uint drawCollider;
+
+uint firstPass;
+
+float rand(in float2 uv)
+{
+    float2 noise = (frac(sin(dot(uv ,float2(12.9898,78.233)*2.0)) * 43758.5453));
+    return abs(noise.x + noise.y) * 0.5;
+}
+
+
+float2 rand2(in float2 uv) {
+    float noiseX = (frac(sin(dot(uv, float2(12.9898,78.233) * 2.0)) * 43758.5453));
+    float noiseY = sqrt(1 - noiseX * noiseX);
+    return float2(noiseX, noiseY);
+}
+
+
+
+
+[numthreads(16,16,1)] //amount of threads per group
+void FunctionKernel (uint3 id : SV_DispatchThreadID)
+{
+    float timeFactor = 20.0*deltaTime;//12.5664;
+    float offset = 1;//0.8
+    float interpolationPower = 0.4142; //1.41421356237-1 //6
+    float diagonalFactor = 0.70716;//0.707106781188 //1.41421356237 //1-1.41421356237
+    float diagonalFactor2 = 1.41421;
+    
+    int x = id.x;
+    int y = id.y;
+    float pixelX = id.x/((float)resolution);
+    float pixelY = id.y/((float)resolution);
+
+    float2 motionVectorPositiveX = float2(0,0); //rightward 
+    float2 motionVectorNegativeX = float2(0,0); //leftward
+    float2 motionVectorPositiveY = float2(0,0); //upward 
+    float2 motionVectorNegativeY = float2(0,0); //downward 
+
+    float2 motionVectorPositiveXPositiveY = float2(0,0); //rightward upward
+    float2 motionVectorNegativeXPositiveY = float2(0,0); //leftward upward
+    float2 motionVectorPositiveXNegativeY = float2(0,0); //rightward downward
+    float2 motionVectorNegativeXNegativeY = float2(0,0); //leftward downward
+
+    float timePositiveX = 0;
+    float timeNegativeX = 0;
+    float timePositiveY = 0;
+    float timeNegativeY = 0;
+
+    
+    float timePositiveXPositiveY = 0;
+    float timeNegativeXPositiveY = 0;
+    float timePositiveXNegativeY = 0;
+    float timeNegativeXNegativeY = 0;
+    
+
+
+    
+    float percent;
+    float2 newVector = float2(0,0);
+    float2 temp = float2(0,0);
+
+    
+    float2 normal;
+
+    
+    float lat = 1;
+    float diag = 1;
+
+    
+
+
+    //left Vector
+    id.x -= 1;
+    if(!(firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        temp = ((directionResultPositiveX[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0){
+            percent = max(0,pow(dot(normalize(temp), float2(1,0)), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorPositiveX += percent * temp;
+
+            if(percent >  0) timePositiveX = max(timePositiveX,(directionResultPositiveX[id.xy].z * timeFactor) + deltaTime);
+        }
+
+        temp = ((directionResultPositiveXNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01 || temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor*(-1.0))), interpolationPower)*offset);
+
+            if(percent > 0)motionVectorPositiveXNegativeY += percent * temp * 0.5;
+
+            if(timePositiveXNegativeY == 0) timePositiveXNegativeY = ((directionResultPositiveXNegativeY[id.xy].z * timeFactor) + deltaTime);
+        }
+
+        temp = ((directionResultPositiveXPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01 || temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor)), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorPositiveXPositiveY += percent * temp * 0.5;
+
+            if(timePositiveXPositiveY == 0) timePositiveXPositiveY = ((directionResultPositiveXPositiveY[id.xy].z * timeFactor) + deltaTime);
+        }
+    }
+
+    //right vector
+    id.x += 2;
+    if(!(firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        //no rightward movement
+        temp = ((directionResultNegativeX[id.xy].xy-0.5)*2.0);
+        if(temp.x < 0){
+            percent = max(0,pow(dot(normalize(temp), float2(-1,0)), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorNegativeX += percent * temp;
+
+            if(percent > 0) timeNegativeX = (directionResultNegativeX[id.xy].z * timeFactor) + deltaTime;
+        }
+
+        temp = ((directionResultNegativeXPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01 || temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1.0),diagonalFactor)), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorNegativeXPositiveY += percent * temp * 0.5;
+
+            if(timeNegativeXPositiveY == 0) timeNegativeXPositiveY = ((directionResultNegativeXPositiveY[id.xy].z * timeFactor) + deltaTime);
+        }
+
+        temp = ((directionResultNegativeXNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01 || temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1.0),diagonalFactor*(-1.0))), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorNegativeXNegativeY += percent * temp * 0.5;
+
+            if(timeNegativeXNegativeY == 0) timeNegativeXNegativeY = ((directionResultNegativeXNegativeY[id.xy].z * timeFactor) + deltaTime);
+        }
+    }
+
+    //bottom vector
+    id.x -= 1;
+    id.y -= 1;
+    if(!( firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        temp = ((directionResultPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.y > 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,1)), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorPositiveY += percent * temp;
+
+            if(percent > 0) timePositiveY = (directionResultPositiveY[id.xy].z * timeFactor) + deltaTime;
+        }
+        temp = ((directionResultPositiveXPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01 || temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor)), interpolationPower)*offset);
+
+            if(percent > 0)motionVectorPositiveXPositiveY += percent * temp * 0.5;
+
+            if(timePositiveXPositiveY == 0) timePositiveXPositiveY = ((directionResultPositiveXPositiveY[id.xy].z * timeFactor) + deltaTime);
+        }
+        temp = ((directionResultNegativeXPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01 || temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1.0),diagonalFactor)), interpolationPower)*offset);
+
+            if(percent > 0)motionVectorNegativeXPositiveY += percent * temp * 0.5;
+
+            if(timeNegativeXPositiveY == 0) timeNegativeXPositiveY = ((directionResultNegativeXPositiveY[id.xy].z * timeFactor) + deltaTime);
+        }
+    }
+
+    //top vector
+    id.y += 2;
+    if(!(firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        //no upward movement
+        temp = ((directionResultNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.y < 0){
+            percent = max(0,pow(dot(normalize(temp), float2(0,-1)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorNegativeY += percent * temp;
+
+            if(percent > 0) timeNegativeY = (directionResultNegativeY[id.xy].z * timeFactor) + deltaTime;
+        }
+        temp = ((directionResultPositiveXNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01 || temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor*(-1.0))), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorPositiveXNegativeY += percent * temp * 0.5;
+
+            if(timePositiveXNegativeY == 0) timePositiveXNegativeY = ((directionResultPositiveXNegativeY[id.xy].z * timeFactor) + deltaTime);
+
+        }
+        temp = ((directionResultNegativeXNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01 || temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1.0),diagonalFactor*(-1.0))), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorNegativeXNegativeY += percent * temp * 0.5;
+
+            if(timeNegativeXNegativeY == 0) timeNegativeXNegativeY = ((directionResultNegativeXNegativeY[id.xy].z * timeFactor) + deltaTime);
+
+        }
+    }
+
+    //reset vector
+    id.y -= 1;
+
+    
+    
+    
+    //bottom left vector
+    id.x -= 1;
+    id.y -= 1;
+    
+    if(!(firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        temp = ((directionResultPositiveXPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01 || temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorPositiveXPositiveY += percent * temp;
+
+            if(percent > 0) timePositiveXPositiveY = (directionResultPositiveXPositiveY[id.xy].z * timeFactor) + deltaTime * diagonalFactor2;
+        }
+
+        temp = ((directionResultPositiveX[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(1,0)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorPositiveX += percent * temp * 0.5;
+
+            if(timePositiveX == 0) timePositiveX = ((directionResultPositiveX[id.xy].z * timeFactor) + deltaTime);
+        }
+
+        temp = ((directionResultPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(0,1)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorPositiveY += percent * temp * 0.5;
+
+            if(timePositiveY == 0) timePositiveY = ((directionResultPositiveY[id.xy].z * timeFactor) + deltaTime);
+        }
+    }
+
+    //top left vector
+    id.y += 2;
+    
+    if(!(firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        temp = ((directionResultPositiveXNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01 || temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor,diagonalFactor*(-1))), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorPositiveXNegativeY += percent * temp;
+
+            if(percent > 0) timePositiveXNegativeY = (directionResultPositiveXNegativeY[id.xy].z * timeFactor) + deltaTime * diagonalFactor2;
+        }
+
+        temp = ((directionResultPositiveX[id.xy].xy-0.5)*2.0);
+        if(temp.x > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(1,0)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorPositiveX += percent * temp * 0.5;
+
+            if(timePositiveX == 0) timePositiveX = ((directionResultPositiveX[id.xy].z * timeFactor) + deltaTime);
+        }
+
+        temp = ((directionResultNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(0,-1)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorNegativeY += percent * temp * 0.5;
+
+            if(timeNegativeY == 0) timeNegativeY = ((directionResultNegativeY[id.xy].z * timeFactor) + deltaTime);
+        }
+    }
+
+    //top right vector
+    id.x += 2;
+
+    if(!(firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        temp = ((directionResultNegativeXNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01 || temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor*(-1))), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorNegativeXNegativeY += percent * temp;
+
+            if(percent > 0) timeNegativeXNegativeY = (directionResultNegativeXNegativeY[id.xy].z * timeFactor) + deltaTime * diagonalFactor2;
+        }
+
+        temp = ((directionResultNegativeX[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(-1,0)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorNegativeX += percent * temp * 0.5;
+
+            if(timeNegativeX == 0) timeNegativeX = ((directionResultNegativeX[id.xy].z * timeFactor) + deltaTime);
+        }
+
+        temp = ((directionResultNegativeY[id.xy].xy-0.5)*2.0);
+        if(temp.y < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(0,-1)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorNegativeY += percent * temp * 0.5;
+
+            if(timeNegativeY == 0) timeNegativeY = ((directionResultNegativeY[id.xy].z * timeFactor) + deltaTime);
+        }
+    }
+    
+    //bottom right vector
+    id.y -= 2;
+    
+    if(!(firstPass == 1 || directionResultPositiveX[id.xy].w < 0.1)){
+        temp = ((directionResultNegativeXPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01 || temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(diagonalFactor*(-1),diagonalFactor)), interpolationPower)*offset);
+
+            if(percent > 0) motionVectorNegativeXPositiveY += percent * temp;
+
+            if(percent > 0) timeNegativeXPositiveY = (directionResultNegativeXPositiveY[id.xy].z * timeFactor) + deltaTime * diagonalFactor2;
+        }
+
+        temp = ((directionResultNegativeX[id.xy].xy-0.5)*2.0);
+        if(temp.x < -0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(-1,0)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorNegativeX += percent * temp * 0.5;
+
+            if(timeNegativeX == 0) timeNegativeX = ((directionResultNegativeX[id.xy].z * timeFactor) + deltaTime);
+        }
+
+        temp = ((directionResultPositiveY[id.xy].xy-0.5)*2.0);
+        if(temp.y > 0.01){
+            percent = max(0,pow(dot(normalize(temp), float2(0,1)), interpolationPower)*offset);
+ 
+            if(percent > 0) motionVectorPositiveY += percent * temp * 0.5;
+
+            if(timePositiveY == 0) timePositiveY = ((directionResultPositiveY[id.xy].z * timeFactor) + deltaTime);
+        }
+    }
+    
+
+    //reset position
+    id.y += 1;
+    id.x -= 1;
+    
+
+    
+    /*
+    if(motionVectorPositiveX.x > 0.01){
+        id.x -= 1;
+        timePositiveX = (directionResultPositiveX[id.xy].z * timeFactor) + deltaTime;
+        id.x += 1;
+    }
+    if(motionVectorNegativeX.x < -0.01){
+        id.x += 1;
+        timeNegativeX = (directionResultNegativeX[id.xy].z * timeFactor) + deltaTime;
+        id.x -= 1;
+    }
+    if(motionVectorPositiveY.y > 0.01){
+        id.y -= 1;
+        timePositiveY = (directionResultPositiveY[id.xy].z * timeFactor) + deltaTime;
+        id.y += 1;
+    }
+    if(motionVectorNegativeY.y < -0.01){
+        id.y += 1;
+        timeNegativeY = (directionResultNegativeY[id.xy].z * timeFactor) + deltaTime;
+        id.y -= 1;
+    }
+
+    if(motionVectorPositiveXPositiveY.x > 0.01 || motionVectorPositiveXPositiveY.y > 0.01){
+        id.x -= 1;
+        id.y -= 1;
+        timePositiveXPositiveY = (directionResultPositiveXPositiveY[id.xy].z * timeFactor) + deltaTime;
+        id.x += 1;
+        id.y += 1;
+    }
+    if(motionVectorNegativeXPositiveY.x < -0.01 || motionVectorNegativeXPositiveY.y > 0.01){
+        id.x += 1;
+        id.y -= 1;
+        timeNegativeXPositiveY = (directionResultNegativeXPositiveY[id.xy].z * timeFactor) + deltaTime;
+        id.x -= 1;
+        id.y += 1;
+    }
+    if(motionVectorPositiveXNegativeY.x > 0.01 || motionVectorPositiveXNegativeY.y < -0.01){
+        id.x -= 1;
+        id.y += 1;
+        timePositiveXNegativeY = (directionResultPositiveXNegativeY[id.xy].z * timeFactor) + deltaTime;
+        id.x += 1;
+        id.y -= 1;
+    }
+    if(motionVectorNegativeXNegativeY.x < -0.01 || motionVectorNegativeXNegativeY.y < -0.01){
+        id.x += 1;
+        id.y += 1;
+        timeNegativeXNegativeY = (directionResultNegativeXNegativeY[id.xy].z * timeFactor) + deltaTime;
+        id.x -= 1;
+        id.y -= 1;
+    }
+    */
+    
+
+    
+
+    
+    
+    
+    /*
+    if(randomize == 1){
+        temp = (rand2(id.xy)-0.5);
+        if(temp.x > 0) {
+            motionVectorPositiveX.x = temp.x;
+        }
+        else{
+            motionVectorNegativeX.x = temp.x;
+        }
+
+        if(temp.y > 0) {
+            motionVectorPositiveY.y = temp.y;
+        }
+        else{
+            motionVectorNegativeY.y = temp.y;
+        }
+        
+    }
+        */
+
+    
+
+    
+    
+    
+    float timeRemainder = fmod(netTime,timeFactor);//6.28319
+    
+
+    if(trackMouse == 1 && drawCollider == 0){
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float2 directionFromInput = normalize(differenceFromInput);
+        float distanceFromInput = sqrt(pow(differenceFromInput.x,2) + pow(differenceFromInput.y,2));
+        float power = (pow(distanceFromInput,strengthPower)*strengthFactor);
+
+
+
+
+
+        if(distanceFromInput <= 0.08){
+            
+            
+            float timeOffset = deltaTime * distanceFromInput * ((float)resolution);
+            
+            
+            timePositiveX = timeOffset;
+            timeNegativeX = timeOffset;
+            timePositiveY = timeOffset;
+            timeNegativeY = timeOffset;
+
+            timePositiveXPositiveY = timeOffset;
+            timeNegativeXPositiveY = timeOffset;
+            timePositiveXNegativeY = timeOffset;
+            timeNegativeXNegativeY = timeOffset;
+            
+
+
+            /*
+            timePositiveX = 0;
+            timeNegativeX = 0;
+            timePositiveY = 0;
+            timeNegativeY = 0;
+
+            timePositiveXPositiveY = 0;
+            timeNegativeXPositiveY = 0;
+            timePositiveXNegativeY = 0;
+            timeNegativeXNegativeY = 0;
+            */
+
+
+            
+        float directionPositiveX = dot(directionFromInput, float2(1,0));
+        float directionNegativeX = dot(directionFromInput, float2(-1,0));
+        float directionPositiveY = dot(directionFromInput, float2(0,1));
+        float directionNegativeY = dot(directionFromInput, float2(0,-1));
+
+        if(directionPositiveX > 0){
+            motionVectorPositiveX += (pow(directionPositiveX,interpolationPower)*offset)/power*directionFromInput;
+            //timePositiveX = timeRemainder * dot(directionFromInput, float2(1,0))/power;
+        }
+        if(directionNegativeX > 0){
+            motionVectorNegativeX += (pow(directionNegativeX,interpolationPower)*offset)/power*directionFromInput;
+            //timeNegativeX = timeRemainder * dot(directionFromInput, float2(-1,0))/power;
+        }
+        if(directionPositiveY > 0){
+            motionVectorPositiveY += (pow(directionPositiveY,interpolationPower)*offset)/power*directionFromInput;
+            //timePositiveY = timeRemainder * dot(directionFromInput, float2(0,1))/power;
+        }
+        if(directionNegativeY > 0){
+            motionVectorNegativeY += (pow(directionNegativeY,interpolationPower)*offset)/power*directionFromInput;
+            //timeNegativeY = timeRemainder * dot(directionFromInput, float2(0,-1))/power;
+        }
+
+        float directionPositiveXPositiveY = dot(directionFromInput, float2(diagonalFactor,diagonalFactor));
+        float directionNegativeXPositiveY = dot(directionFromInput, float2(diagonalFactor*(-1.0),diagonalFactor));
+        float directionPositiveXNegativeY = dot(directionFromInput, float2(diagonalFactor,diagonalFactor*(-1.0)));
+        float directionNegativeXNegativeY = dot(directionFromInput, float2(diagonalFactor*(-1.0),diagonalFactor*(-1.0)));
+
+        if(directionPositiveXPositiveY > 0){
+            motionVectorPositiveXPositiveY += (pow(directionPositiveXPositiveY,interpolationPower)*offset)/power*directionFromInput;
+            //timePositiveX =  timeRemainder * dot(directionFromInput, float2(1,0))/power;
+        }
+        if(directionNegativeXPositiveY > 0){
+            motionVectorNegativeXPositiveY += (pow(directionNegativeXPositiveY,interpolationPower)*offset)/power*directionFromInput;
+            //timeNegativeX =  timeRemainder * dot(directionFromInput, float2(-1,0))/power;
+        }
+        if(directionPositiveXNegativeY > 0){
+            motionVectorPositiveXNegativeY += (pow(directionPositiveXNegativeY,interpolationPower)*offset)/power*directionFromInput;
+            //timePositiveY =  timeRemainder * dot(directionFromInput, float2(0,1))/power;
+        }
+        if(directionNegativeXNegativeY > 0){
+            motionVectorNegativeXNegativeY += (pow(directionNegativeXNegativeY,interpolationPower)*offset)/power*directionFromInput;
+            //timeNegativeY =  timeRemainder * dot(directionFromInput, float2(0,-1))/power;
+        }
+
+
+
+
+            
+            
+        }
+
+        
+
+        
+    }
+
+    motionVectorPositiveX /= disperseRate;
+    motionVectorNegativeX /= disperseRate;
+    motionVectorPositiveY /= disperseRate;
+    motionVectorNegativeY /= disperseRate;
+
+    motionVectorPositiveXPositiveY /= disperseRate;
+    motionVectorNegativeXPositiveY /= disperseRate;
+    motionVectorPositiveXNegativeY /= disperseRate;
+    motionVectorNegativeXNegativeY /= disperseRate;
+    
+    
+    
+    /*
+        motionVectorPositiveXPositiveY
+        motionVectorNegativeXPositiveY
+        motionVectorPositiveXNegativeY
+        motionVectorNegativeXNegativeY
+        */
+
+    
+
+    float timeTemp = 0;
+    float directionTemp2 = 0;
+
+    id.x += 1;
+    if(id.x == resolution-2||directionResultPositiveX[id.xy].w < 0.1){
+        motionVectorNegativeX = float2((abs(motionVectorPositiveX.x)) * (-1) * elasicity, (motionVectorPositiveX.y) * elasicity);
+        motionVectorPositiveX = float2(0,0);
+
+        
+        motionVectorPositiveY = float2(abs(motionVectorPositiveY.x) * (-1) * elasicity, motionVectorPositiveY.y * elasicity);
+        motionVectorNegativeY = float2(abs(motionVectorNegativeY.x) * (-1) * elasicity, motionVectorNegativeY.y * elasicity);
+
+        
+
+        motionVectorNegativeXPositiveY = float2((abs(motionVectorPositiveXPositiveY.x)) * (-1) * elasicity, (motionVectorPositiveXPositiveY.y) * elasicity);
+        motionVectorPositiveXPositiveY = float2(0,0);
+
+        motionVectorNegativeXNegativeY = float2((abs(motionVectorPositiveXNegativeY.x)) * (-1) * elasicity, (motionVectorPositiveXNegativeY.y) * elasicity);
+        motionVectorPositiveXNegativeY = float2(0,0);
+
+
+
+        timeNegativeX = timePositiveX;
+        timePositiveX = 0;
+
+
+        timeNegativeXPositiveY = timePositiveXPositiveY;
+        timePositiveXPositiveY = 0;
+
+        timeNegativeXNegativeY = timePositiveXNegativeY;
+        timePositiveXNegativeY = 0;
+    }
+    id.x -= 2;
+    if(id.x == 1||directionResultPositiveX[id.xy].w < 0.1){
+        motionVectorPositiveX = float2((abs(motionVectorNegativeX.x)) * elasicity, (motionVectorNegativeX.y) * elasicity);
+        motionVectorNegativeX = float2(0,0);
+        
+
+        
+        motionVectorPositiveY = float2(abs(motionVectorPositiveY.x) * elasicity, motionVectorPositiveY.y * elasicity);
+        motionVectorNegativeY = float2(abs(motionVectorNegativeY.x) * elasicity, motionVectorNegativeY.y * elasicity);
+
+        
+        motionVectorPositiveXPositiveY = float2((abs(motionVectorNegativeXPositiveY.x)) * elasicity, (motionVectorNegativeXPositiveY.y) * elasicity);
+        motionVectorNegativeXPositiveY = float2(0,0);
+        
+
+        motionVectorPositiveXNegativeY = float2((abs(motionVectorNegativeXNegativeY.x)) * elasicity, (motionVectorNegativeXNegativeY.y) * elasicity);
+        motionVectorNegativeXNegativeY = float2(0,0);
+        
+
+        
+        timePositiveX = timeNegativeX;
+        timeNegativeX = 0;
+
+        timePositiveXPositiveY = timeNegativeXPositiveY;
+        timeNegativeXPositiveY = 0;
+        
+        timePositiveXNegativeY = timeNegativeXNegativeY;
+        timeNegativeXNegativeY = 0;
+        
+    }
+    id.x += 1;
+    id.y += 1;
+    if(id.y == resolution-2||directionResultPositiveX[id.xy].w < 0.1){
+        motionVectorNegativeY = float2((motionVectorPositiveY.x) * elasicity,(abs(motionVectorPositiveY.y)) * (-1) * elasicity);
+        motionVectorPositiveY = float2(0,0);
+
+        
+        motionVectorPositiveX = float2(motionVectorPositiveX.x * elasicity, abs(motionVectorPositiveX.y) * (-1) * elasicity);
+        motionVectorNegativeX = float2(motionVectorNegativeX.x * elasicity, abs(motionVectorNegativeX.y) * (-1) * elasicity);
+
+        
+
+        motionVectorNegativeXNegativeY = float2((motionVectorNegativeXPositiveY.x) * elasicity, (abs(motionVectorNegativeXPositiveY.y)) * (-1) * elasicity);
+        motionVectorNegativeXPositiveY = float2(0,0);
+
+        motionVectorPositiveXNegativeY = float2((motionVectorPositiveXPositiveY.x) * elasicity, (abs(motionVectorPositiveXPositiveY.y)) * (-1) * elasicity);
+        motionVectorPositiveXPositiveY = float2(0,0);
+
+        
+        
+        timeNegativeY = timePositiveY;
+        timePositiveY = 0;
+
+        timePositiveXNegativeY = timePositiveXPositiveY;
+        timePositiveXPositiveY = 0;
+
+        timeNegativeXNegativeY = timeNegativeXPositiveY;
+        timeNegativeXPositiveY = 0;
+    }
+    id.y -= 2;
+    if(id.y == 1||directionResultPositiveX[id.xy].w < 0.1){
+        
+
+        motionVectorPositiveY = float2((motionVectorNegativeY.x) * elasicity,(abs(motionVectorNegativeY.y)) * elasicity);
+        motionVectorNegativeY = float2(0,0);
+
+        
+        motionVectorPositiveX = float2(motionVectorPositiveX.x * elasicity, abs(motionVectorPositiveX.y) * elasicity);
+        motionVectorNegativeX = float2(motionVectorNegativeX.x * elasicity, abs(motionVectorNegativeX.y) * elasicity);
+
+        motionVectorNegativeXPositiveY = float2((motionVectorNegativeXNegativeY.x) * elasicity, (abs(motionVectorNegativeXNegativeY.y)) * elasicity);
+        motionVectorNegativeXNegativeY = float2(0,0);
+
+        motionVectorPositiveXPositiveY = float2((motionVectorPositiveXNegativeY.x) * elasicity, (abs(motionVectorPositiveXNegativeY.y)) * elasicity);
+        motionVectorPositiveXNegativeY = float2(0,0);
+
+
+        
+        timePositiveY = timeNegativeY;
+        timeNegativeY = 0;
+
+
+        timePositiveXPositiveY = timePositiveXNegativeY;
+        timePositiveXNegativeY = 0;
+
+        timeNegativeXPositiveY = timeNegativeXNegativeY;
+        timeNegativeXNegativeY = 0;
+    }
+    id.y += 1;
+
+
+
+
+
+
+    float magnitude1 = sqrt(pow(motionVectorPositiveX.x, 2) + pow(motionVectorPositiveX.y,2));
+    float magnitude2 = sqrt(pow(motionVectorNegativeX.x, 2) + pow(motionVectorNegativeX.y,2));
+    float magnitude3 = sqrt(pow(motionVectorPositiveY.x, 2) + pow(motionVectorPositiveY.y,2));
+    float magnitude4 = sqrt(pow(motionVectorNegativeY.x, 2) + pow(motionVectorNegativeY.y,2));
+
+    float magnitude5 = sqrt(pow(motionVectorPositiveXPositiveY.x, 2) + pow(motionVectorPositiveXPositiveY.y,2));
+    float magnitude6 = sqrt(pow(motionVectorNegativeXPositiveY.x, 2) + pow(motionVectorNegativeXPositiveY.y,2));
+    float magnitude7 = sqrt(pow(motionVectorPositiveXNegativeY.x, 2) + pow(motionVectorPositiveXNegativeY.y,2));
+    float magnitude8 = sqrt(pow(motionVectorNegativeXNegativeY.x, 2) + pow(motionVectorNegativeXNegativeY.y,2));
+
+    /*
+    motionVectorPositiveXPositiveY
+    motionVectorNegativeXPositiveY
+    motionVectorPositiveXNegativeY
+    motionVectorNegativeXNegativeY
+    */
+
+    
+    
+        
+    
+    
+
+    
+    // netKineticEnergy = (sound pressure)
+    float netKineticEnergy = magnitude1 + magnitude2 + magnitude3 + magnitude4 + magnitude5 + magnitude6 + magnitude7 + magnitude8;
+
+    
+
+    
+        
+    
+    //magnitude/=4;
+    // netKineticEnergy = planks constant * speed of light / wavelength
+    
+    //float waveLength = 1.0 / totalEnergy;
+
+    //netTime/= 4;
+    //netTime = fmod(netTime,6.28319);
+    float amplitude = 0.0;
+    float phase1;
+    float phase2;
+    float phase3;
+    float phase4;
+    float phase5;
+    float phase6;
+    float phase7;
+    float phase8;
+    
+    //if(frequency<2500.0){
+         phase1 = magnitude1*(sin(6.28319*(timePositiveX-netTime)*frequency));
+         phase2 = magnitude2*(sin(6.28319*(timeNegativeX-netTime)*frequency));
+         phase3 = magnitude3*(sin(6.28319*(timePositiveY-netTime)*frequency));
+         phase4 = magnitude4*(sin(6.28319*(timeNegativeY-netTime)*frequency));
+
+         phase5 = magnitude5*(sin(6.28319*(timePositiveXPositiveY-netTime)*frequency));
+         phase6 = magnitude6*(sin(6.28319*(timeNegativeXPositiveY-netTime)*frequency));
+         phase7 = magnitude7*(sin(6.28319*(timePositiveXNegativeY-netTime)*frequency));
+         phase8 = magnitude8*(sin(6.28319*(timeNegativeXNegativeY-netTime)*frequency));
+         /*
+    }
+    else{
+        phase1 = magnitude1;
+         phase2 = magnitude2;
+         phase3 = magnitude3;
+         phase4 = magnitude4;
+
+         phase5 = magnitude5;
+         phase6 = magnitude6;
+         phase7 = magnitude7;
+         phase8 = magnitude8;
+    }
+         */
+
+
+
+    amplitude = (phase1 + phase2 + phase3 + phase4 + phase5 + phase6 + phase7 + phase8)/16;
+
+
+    
+    
+    
+    
+    //float timeCutOff = timeFactor; //6.28319;
+    if ((timePositiveX)/timeFactor >= 1.0){
+        timePositiveX -= timeFactor;
+        //timePositiveX = 0;
+    }
+    if ((timeNegativeX)/timeFactor >= 1.0){
+        timeNegativeX -= timeFactor;
+        //timeNegativeX = 0;
+    }
+    if ((timePositiveY)/timeFactor >= 1.0){
+        timePositiveY -= timeFactor;
+        //timePositiveY = 0;
+    }
+    if ((timeNegativeY)/timeFactor >= 1.0){
+        timeNegativeY -= timeFactor;
+        //timeNegativeY = 0;
+    }
+
+    if ((timePositiveXPositiveY)/timeFactor >= 1.0){
+        timePositiveXPositiveY -= timeFactor;
+        //timePositiveXPositiveY = 0;
+    }
+    if ((timeNegativeXPositiveY)/timeFactor >= 1.0){
+        timeNegativeXPositiveY -= timeFactor;
+        //timeNegativeXPositiveY = 0;
+    }
+    if ((timePositiveXNegativeY)/timeFactor >= 1.0){
+        timePositiveXNegativeY -= timeFactor;
+        //timePositiveXNegativeY = 0;
+    }
+    if ((timeNegativeXNegativeY)/timeFactor >= 1.0){
+        timeNegativeXNegativeY -= timeFactor;
+        //timeNegativeXNegativeY = 0;
+    }
+    
+    
+    
+
+    
+    
+    float4 colliderDirection = float4(0.5,0.5,0.0,0.0);
+    float4 blankDirection = float4(0.5,0.5,0.0,1.0);
+
+    
+
+    //bounces *= magnitude;
+    //bounces = 0.00;
+
+    //directionResult[id.xy] = float4(clamp((motionVector/2.0)+.5,0,1),time,directionResult[id.xy].w);
+    
+    //if clear pass
+    if(firstPass == 1){
+        directionResultPositiveX[id.xy] = blankDirection;
+        directionResultNegativeX[id.xy] = blankDirection;
+        directionResultPositiveY[id.xy] = blankDirection;
+        directionResultNegativeY[id.xy] = blankDirection;
+
+
+        directionResultPositiveXPositiveY[id.xy] = blankDirection;
+        directionResultNegativeXPositiveY[id.xy] = blankDirection;
+        directionResultPositiveXNegativeY[id.xy] = blankDirection;
+        directionResultNegativeXNegativeY[id.xy] = blankDirection;
+    }
+    else{
+        //if collider exists
+        if(directionResultPositiveX[id.xy].w < 0.1){
+            directionResultPositiveX[id.xy] = colliderDirection;
+            directionResultNegativeX[id.xy] = colliderDirection;
+            directionResultPositiveY[id.xy] = colliderDirection;
+            directionResultNegativeY[id.xy] = colliderDirection;
+
+            directionResultPositiveXPositiveY[id.xy] = colliderDirection;
+            directionResultNegativeXPositiveY[id.xy] = colliderDirection;
+            directionResultPositiveXNegativeY[id.xy] = colliderDirection;
+            directionResultNegativeXNegativeY[id.xy] = colliderDirection;
+        } 
+        else{
+            
+            directionResultPositiveX[id.xy] = float4(clamp(((motionVectorPositiveX)/2.0)+.5,0,1),timePositiveX / timeFactor, 1);
+            directionResultNegativeX[id.xy] = float4(clamp(((motionVectorNegativeX)/2.0)+.5,0,1),timeNegativeX / timeFactor, 1);
+            directionResultPositiveY[id.xy] = float4(clamp(((motionVectorPositiveY)/2.0)+.5,0,1),timePositiveY / timeFactor, 1);
+            directionResultNegativeY[id.xy] = float4(clamp(((motionVectorNegativeY)/2.0)+.5,0,1),timeNegativeY / timeFactor, 1);
+
+            directionResultPositiveXPositiveY[id.xy] = float4(clamp(((motionVectorPositiveXPositiveY)/2.0)+.5,0,1),timePositiveXPositiveY / timeFactor, 1);
+            directionResultNegativeXPositiveY[id.xy] = float4(clamp(((motionVectorNegativeXPositiveY)/2.0)+.5,0,1),timeNegativeXPositiveY / timeFactor, 1);
+            directionResultPositiveXNegativeY[id.xy] = float4(clamp(((motionVectorPositiveXNegativeY)/2.0)+.5,0,1),timePositiveXNegativeY / timeFactor, 1);
+            directionResultNegativeXNegativeY[id.xy] = float4(clamp(((motionVectorNegativeXNegativeY)/2.0)+.5,0,1),timeNegativeXNegativeY / timeFactor, 1);
+        }
+    }
+
+    
+    
+    
+
+        //Directional
+    //computeResult[id.xy] = float4(directionResult[id.xy].x * magnitude, directionResult[id.xy].y * magnitude,0,1);
+    
+    
+        //Amplitude
+    computeResult[id.xy] = float4(amplitude, amplitude, amplitude,1);
+
+        //Net Time
+    //netTime = ((timePositiveX+timeNegativeX+timePositiveY+timeNegativeY + timePositiveXPositiveY + timeNegativeXPositiveY + timePositiveXNegativeY + timeNegativeXNegativeY)/8);
+
+    //computeResult[id.xy] = float4(timePositiveX, timeNegativeX, timePositiveY, 1); //6.28/100
+    //computeResult[id.xy] = float4(netTime, netTime, netTime, 1);
+
+
+
+
+        //Directional Time
+    //computeResult[id.xy] = float4(timePositiveX, timeNegativeX, timePositiveY, 1);
+    
+        //Net Energy
+    //computeResult[id.xy] = float4(netKineticEnergy/8, netKineticEnergy/8,netKineticEnergy/8,1);
+    
+        //UVs
+    //computeResult[id.xy] = float4(pixelX, pixelY, 0,1);
+
+
+    
+    
+    if(id.x >= resolution-2 || id.x <= 1 || id.y >= resolution-2 || id.y <= 1){
+        computeResult[id.xy] = float4(1, 0, 0, 1);
+        directionResultPositiveX[id.xy] = colliderDirection;
+        directionResultNegativeX[id.xy] = colliderDirection;
+        directionResultPositiveY[id.xy] = colliderDirection;
+        directionResultNegativeY[id.xy] = colliderDirection;
+
+        directionResultPositiveXPositiveY[id.xy] = colliderDirection;
+        directionResultNegativeXPositiveY[id.xy] = colliderDirection;
+        directionResultPositiveXNegativeY[id.xy] = colliderDirection;
+        directionResultNegativeXNegativeY[id.xy] = colliderDirection;
+
+        
+    }
+        
+    
+
+    if(directionResultPositiveX[id.xy].w < 0.1){
+        computeResult[id.xy] = float4(1, 0, 0, 1);
+    }
+
+
+    if(trackMouse == 1 && drawCollider == 1){
+        //draw colliders
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float distanceFromInput = sqrt((differenceFromInput.x * differenceFromInput.x) + (differenceFromInput.y * differenceFromInput.y));
+        if(distanceFromInput <= 0.025){
+            directionResultPositiveX[id.xy] = colliderDirection;
+            directionResultNegativeX[id.xy] = colliderDirection;
+            directionResultPositiveY[id.xy] = colliderDirection;
+            directionResultNegativeY[id.xy] = colliderDirection;
+
+            directionResultPositiveXPositiveY[id.xy] = colliderDirection;
+            directionResultNegativeXPositiveY[id.xy] = colliderDirection;
+            directionResultPositiveXNegativeY[id.xy] = colliderDirection;
+            directionResultNegativeXNegativeY[id.xy] = colliderDirection;
+        }
+    }
+
+    if(trackMouse == 1 && drawCollider == 2){
+        //erase colliders
+        float2 differenceFromInput = float2(pixelX - (((float)mouseInputX)/((float)resolution)), pixelY - (((float)mouseInputY)/((float)resolution)));
+        float distanceFromInput = sqrt((differenceFromInput.x * differenceFromInput.x) + (differenceFromInput.y * differenceFromInput.y));
+        if(distanceFromInput <= 0.025){
+            directionResultPositiveX[id.xy] = blankDirection;
+            directionResultNegativeX[id.xy] = blankDirection;
+            directionResultPositiveY[id.xy] = blankDirection;
+            directionResultNegativeY[id.xy] = blankDirection;
+
+            directionResultPositiveXPositiveY[id.xy] = blankDirection;
+            directionResultNegativeXPositiveY[id.xy] = blankDirection;
+            directionResultPositiveXNegativeY[id.xy] = blankDirection;
+            directionResultNegativeXNegativeY[id.xy] = blankDirection;
+        }
+    }
+    
+
+    
+    
+}
+
+
